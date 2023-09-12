@@ -19,12 +19,22 @@ const ChatScreen = ({navigation, route}) => {
     };
 
     const messagesRef = db.collection('messages');
-    // const query = messagesRef.orderBy('createdAt').limit(25);
-    const [messages] = useCollectionData({idField: 'id'})
     const [formValue, setFormValue] = useState('');
+    // const userRef = db.collection('users').doc(messagesRef.uid)
     const dummy = useRef();
+    const [messages, setMessages] = useState([]);
+    // const name_list = {};
+    const fetchMessages = async () => {
+      const querySnapshot = await messagesRef.orderBy('createdAt').get();
+      const newMessages = [];
+      querySnapshot.forEach((doc) => {
+        newMessages.push(doc.data());
+      });
+      setMessages(newMessages);
+    };
     
     const sendMessage = async () => {
+
       const { uid, photoURL } = auth.currentUser;
   
       await messagesRef.add({
@@ -35,9 +45,24 @@ const ChatScreen = ({navigation, route}) => {
       });
   
       setFormValue('');
-      dummy.current.scrollToEnd({ animated: true }); // Scroll to the end (this might require some additional setup)
+      dummy.current.scrollToEnd({ animated: true });
     };
 
+
+    useEffect(() => {
+      const unsubscribe = messagesRef
+        .orderBy('createdAt')
+        .onSnapshot((snapshot) => {
+          const newMessages = [];
+          snapshot.forEach((doc) => {
+            newMessages.push(doc.data());
+          });
+          setMessages(newMessages);
+        });
+        return () => unsubscribe();
+      }, []);
+
+    
     return (
       <View style={styles.chatContainer}>
         <ScrollView
@@ -45,8 +70,8 @@ const ChatScreen = ({navigation, route}) => {
           ref={dummy}
           onContentSizeChange={() => dummy.current.scrollToEnd({ animated: true })}
         >
-          {messages &&
-            messages.map((msg) => <ChatMessage key={msg.id} message={msg} />)}
+        {messages &&
+          messages.map((msg, index) => <ChatMessage key={index} message={msg} />)}
         </ScrollView>
         <View style={styles.inputContainer}>
           <TextInput
@@ -66,15 +91,11 @@ const ChatScreen = ({navigation, route}) => {
 };
 
 function ChatMessage(props) {
-  const { text, uid, photoURL } = props.message;
+  const { text, uid, createdAt } = props.message;
   const messageClass = uid === auth.currentUser.uid ? 'sent' : 'received';
 
   return (
     <View style={styles.message}>
-      <Image
-        style={styles.avatar}
-        source={{ uri: photoURL || 'https://api.adorable.io/avatars/23/abott@adorable.png' }}
-      />
       <View style={messageClass === 'sent' ? styles.sentMessage : styles.receivedMessage}>
         <Text>{text}</Text>
       </View>
