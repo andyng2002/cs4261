@@ -4,34 +4,43 @@ import { auth, db } from '../firebaseConfig';
 import firebase from "firebase/app";
 import "firebase/firestore";
 import 'firebase/auth';
-import { useCollectionData } from 'react-firebase-hooks/firestore';
 
 const ChatScreen = ({navigation, route}) => {
 
-    const inputStyle = {
-    width: 300,
-    height: 40,
-    borderColor: 'gray',
-    borderWidth: 1,
-    borderRadius: 5,
-    marginBottom: 10,
-    paddingLeft: 10,
-    };
-
     const messagesRef = db.collection('messages');
     const [formValue, setFormValue] = useState('');
-    // const userRef = db.collection('users').doc(messagesRef.uid)
     const dummy = useRef();
     const [messages, setMessages] = useState([]);
-    // const name_list = {};
-    const fetchMessages = async () => {
-      const querySnapshot = await messagesRef.orderBy('createdAt').get();
-      const newMessages = [];
-      querySnapshot.forEach((doc) => {
-        newMessages.push(doc.data());
-      });
-      setMessages(newMessages);
-    };
+
+    useEffect(() => {
+      const unsubscribe = messagesRef
+        .orderBy('createdAt')
+        .onSnapshot((snapshot) => {
+          const newMessages = [];
+          snapshot.forEach((doc) => {
+            const messageData = doc.data();
+            // Fetch the corresponding user's document based on the 'uid'
+            db.collection('users')
+              .doc(messageData.uid)
+              .get()
+              .then((userDoc) => {
+                if (userDoc.exists) {
+                  const userData = userDoc.data();
+                  // Add the user's name to the message data
+                  messageData.firstName = userData.firstName;
+                  messageData.lastName = userData.lastName;
+                  newMessages.push(messageData);
+                  setMessages([...newMessages]);
+                }
+              })
+              .catch((error) => {
+                console.error('Error getting user document:', error);
+              });
+          });
+        });
+  
+      return () => unsubscribe();
+    }, []);
     
     const sendMessage = async () => {
 
@@ -48,20 +57,6 @@ const ChatScreen = ({navigation, route}) => {
       dummy.current.scrollToEnd({ animated: true });
     };
 
-
-    useEffect(() => {
-      const unsubscribe = messagesRef
-        .orderBy('createdAt')
-        .onSnapshot((snapshot) => {
-          const newMessages = [];
-          snapshot.forEach((doc) => {
-            newMessages.push(doc.data());
-          });
-          setMessages(newMessages);
-        });
-        return () => unsubscribe();
-      }, []);
-
     
     return (
       <View style={styles.chatContainer}>
@@ -70,8 +65,9 @@ const ChatScreen = ({navigation, route}) => {
           ref={dummy}
           onContentSizeChange={() => dummy.current.scrollToEnd({ animated: true })}
         >
-        {messages &&
-          messages.map((msg, index) => <ChatMessage key={index} message={msg} />)}
+          {messages.map((msg, index) => (
+            <ChatMessage key={index} message={msg} />
+          ))}
         </ScrollView>
         <View style={styles.inputContainer}>
           <TextInput
@@ -80,24 +76,20 @@ const ChatScreen = ({navigation, route}) => {
             onChangeText={(text) => setFormValue(text)}
             placeholder="Say something nice"
           />
-          <Button
-            title="Send"
-            onPress={sendMessage}
-            disabled={!formValue}
-          />
+          <Button title="Send" onPress={sendMessage} disabled={!formValue} />
         </View>
       </View>
     );
 };
 
 function ChatMessage(props) {
-  const { text, uid, createdAt } = props.message;
-  const messageClass = uid === auth.currentUser.uid ? 'sent' : 'received';
+  const { text, firstName, lastName } = props.message;
+  const messageClass = props.message.uid === auth.currentUser.uid ? 'sent' : 'received';
 
   return (
     <View style={styles.message}>
       <View style={messageClass === 'sent' ? styles.sentMessage : styles.receivedMessage}>
-        <Text>{text}</Text>
+        <Text>{firstName} {lastName}: {text}</Text>
       </View>
     </View>
   );
